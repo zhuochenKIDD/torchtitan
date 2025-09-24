@@ -112,7 +112,7 @@ class HuggingFaceTextDataset(IterableDataset, Stateful):
         max_buffer_token_len = 1 + self.seq_len
 
         while True:
-            for sample in self._get_data_iter():
+            for sample in self._get_data_iter(): 
                 # Use the dataset-specific text processor
                 sample_text = self._text_processor(sample)
                 sample_tokens = self._tokenizer.encode(
@@ -121,10 +121,16 @@ class HuggingFaceTextDataset(IterableDataset, Stateful):
                 self._token_buffer.extend(sample_tokens)
                 self._sample_idx += 1
 
+                # TODO：这里datapipeline确实是cpython的瓶颈
+                # 未来可以考虑用c++实现一个高效的tokenizer和数据pipeline
+                # 目前的解决方案是用更大的batch size来减少dataloader的调用开销
+                # Yield as many full seq_len samples as possible
                 while len(self._token_buffer) >= max_buffer_token_len:
                     x = torch.LongTensor(self._token_buffer[:max_buffer_token_len])
                     # update tokens to the remaining tokens
                     self._token_buffer = self._token_buffer[max_buffer_token_len:]
+                    # 这里label就是input右移一位
+                    # 也就是预测下一个token
                     input = x[:-1]
                     label = x[1:]
                     yield {"input": input}, label
